@@ -31,7 +31,7 @@ func Login(w http.ResponseWriter, r *http.Request) {
 	var user models.User
 	var hashedPassword string
 	err := database.DB.QueryRow(
-		"SELECT id, username, email, password, is_staff, role, first_name, last_name, is_active FROM auth_user WHERE username = $1 AND is_active = true",
+		"SELECT id, username, email, password, is_staff, roles, first_name, last_name, is_active FROM auth_user WHERE username = $1 AND is_active = true",
 		req.Username,
 	).Scan(&user.ID, &user.Username, &user.Email, &hashedPassword, &user.IsStaff, &user.Role, &user.FirstName, &user.LastName, &user.IsActive)
 
@@ -86,7 +86,7 @@ func Register(w http.ResponseWriter, r *http.Request) {
 
 	var userID int
 	err = database.DB.QueryRow(
-		"INSERT INTO auth_user (username, email, password, first_name, last_name, role, is_staff, is_superuser, is_active, date_joined) VALUES ($1, $2, $3, $4, $5, $6, false, false, true, NOW()) RETURNING id",
+		"INSERT INTO auth_user (username, email, password, first_name, last_name, roles, is_staff, is_superuser, is_active, date_joined) VALUES ($1, $2, $3, $4, $5, $6, false, false, true, NOW()) RETURNING id",
 		req.Username, req.Email, string(hashedPassword), req.FirstName, req.LastName, req.Role,
 	).Scan(&userID)
 

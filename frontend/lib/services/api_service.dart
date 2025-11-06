@@ -80,14 +80,8 @@ class ApiService {
       }
       return List<Map<String, dynamic>>.from(response['results'] ?? []);
     } catch (e) {
-      // Return static data as fallback
-      return [
-        {"id": 1, "product_name": "Laptop Dell", "category": "Electronics", "quantity": 50, "location": "A-01", "updated_at": "2025-09-10T04:37:24Z"},
-        {"id": 2, "product_name": "Mouse Wireless", "category": "Electronics", "quantity": 100, "location": "A-02", "updated_at": "2025-09-10T04:37:24Z"},
-        {"id": 3, "product_name": "Kertas A4", "category": "Office Supplies", "quantity": 200, "location": "B-01", "updated_at": "2025-09-10T04:37:24Z"},
-        {"id": 4, "product_name": "Smartphone Samsung", "category": "Electronics", "quantity": 15, "location": "A-03", "updated_at": "2025-09-10T04:41:25Z"},
-        {"id": 5, "product_name": "semen", "category": "material", "quantity": 20, "location": "warehouse A", "updated_at": "2025-09-10T04:47:49Z"},
-      ];
+      print('Error loading inventory: $e');
+      return [];
     }
   }
 
@@ -366,19 +360,6 @@ class ApiService {
     return await _makeRequest('POST', '/dispatches', data);
   }
 
-  Future<List<dynamic>> getReturns() async {
-    try {
-      final response = await _makeRequest('GET', '/returns');
-      return response is List ? response : response['results'] ?? [];
-    } catch (e) {
-      return [];
-    }
-  }
-
-  Future<dynamic> createReturn(Map<String, dynamic> data) async {
-    return await _makeRequest('POST', '/returns', data);
-  }
-
   Future<dynamic> createReception(Map<String, dynamic> data) async {
     return await _makeRequest('POST', '/receptions', data);
   }
@@ -412,4 +393,28 @@ class ApiService {
   Future<dynamic> createInventoryItem(Map<String, dynamic> data) async {
     return await _makeRequest('POST', '/inventory', data);
   }
+
+  Future<List<dynamic>> getReturns() async {
+    try {
+      final response = await _makeRequest('GET', '/api/returns');
+      return response is List ? response : response['results'] ?? [];
+    } catch (e) {
+      print('❌ Error getting returns: $e');
+      return [];
+    }
+  }
+
+  Future<dynamic> createReturn(Map<String, dynamic> data) async {
+    try {
+      print('📤 Sending return data: $data');
+      final response = await _makeRequest('POST', '/api/returns', data);
+      print('✅ Return API response: $response');
+      return response;
+    } catch (e) {
+      print('❌ Error creating return: $e');
+      throw e;
+    }
+  }
+
+
 }

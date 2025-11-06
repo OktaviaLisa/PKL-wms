@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../services/api_service.dart';
+import 'returns_screen.dart';
 
 class QualityControlScreen extends StatefulWidget {
   const QualityControlScreen({super.key});
@@ -24,17 +25,15 @@ class _QualityControlScreenState extends State<QualityControlScreen> {
 
   Future<void> _loadQualityChecks() async {
     try {
-      // Load existing QC records
       final existingQCs = await _apiService.getQualityChecks();
       final qcMap = <int, Map<String, dynamic>>{};
       for (var qc in existingQCs) {
-        qcMap[qc['reception_id']] = qc; // Use reception_id as key
+        qcMap[qc['reception_id']] = qc;
       }
-      
-      // Load receptions with quality_check status
+
       final receptions = await _apiService.getReceptions();
       final qualityCheckItems = <Map<String, dynamic>>[];
-      
+
       for (var item in receptions) {
         if (item['status'] == 'quality_check') {
           final existingQC = qcMap[item['id']];
@@ -51,7 +50,7 @@ class _QualityControlScreenState extends State<QualityControlScreen> {
           });
         }
       }
-      
+
       setState(() {
         _qualityChecks = qualityCheckItems;
         _isLoading = false;
@@ -71,7 +70,7 @@ class _QualityControlScreenState extends State<QualityControlScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Quality Control'),
-        backgroundColor: Colors.deepPurple[700],
+        backgroundColor: Colors.red[700],
         foregroundColor: Colors.white,
       ),
       body: _isLoading
@@ -87,8 +86,8 @@ class _QualityControlScreenState extends State<QualityControlScreen> {
                       margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
                       child: ListTile(
                         leading: CircleAvatar(
-                          backgroundColor: Colors.deepPurple[100],
-                          child: Icon(Icons.verified, color: Colors.deepPurple[700]),
+                          backgroundColor: Colors.red[100],
+                          child: Icon(Icons.verified, color: Colors.red[700]),
                         ),
                         title: Text(check['product_name'] ?? 'Produk Tidak Diketahui'),
                         subtitle: Column(
@@ -117,13 +116,18 @@ class _QualityControlScreenState extends State<QualityControlScreen> {
         children: [
           Icon(Icons.verified_outlined, size: 64, color: Colors.grey[400]),
           const SizedBox(height: 16),
-          Text('Belum ada barang untuk Quality Control', style: TextStyle(fontSize: 18, color: Colors.grey[600])),
+          Text('Belum ada barang untuk Quality Control',
+              style: TextStyle(fontSize: 18, color: Colors.grey[600])),
           const SizedBox(height: 8),
-          Text('Tambahkan barang di Penerimaan Barang terlebih dahulu', style: TextStyle(color: Colors.grey[500])),
+          Text('Tambahkan barang di Penerimaan Barang terlebih dahulu',
+              style: TextStyle(color: Colors.grey[500])),
           const SizedBox(height: 16),
           ElevatedButton(
             onPressed: () => _loadQualityChecks(),
-            child: const Text('Refresh'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red[700],
+            ),
+            child: const Text('Refresh', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -157,12 +161,13 @@ class _QualityControlScreenState extends State<QualityControlScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Quality Check'),
+        title: const Text('Quality Check'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Produk: ${item['product_name']}', style: const TextStyle(fontWeight: FontWeight.bold)),
+            Text('Produk: ${item['product_name']}',
+                style: const TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             Text('Supplier: ${item['supplier'] ?? 'N/A'}'),
             Text('Jumlah: ${item['quantity']} unit'),
@@ -170,7 +175,8 @@ class _QualityControlScreenState extends State<QualityControlScreen> {
             if (item['notes'] != null && item['notes'].toString().isNotEmpty)
               Text('Catatan: ${item['notes']}'),
             const SizedBox(height: 20),
-            const Text('Pilih hasil Quality Check:', style: TextStyle(fontWeight: FontWeight.w600)),
+            const Text('Pilih hasil Quality Check:',
+                style: TextStyle(fontWeight: FontWeight.w600)),
             const SizedBox(height: 12),
             Row(
               children: [
@@ -192,8 +198,8 @@ class _QualityControlScreenState extends State<QualityControlScreen> {
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: () {
-                      _updateQCStatus(item, 'FAIL');
                       Navigator.pop(context);
+                      _handleFailedQC(item);
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.red,
@@ -219,7 +225,6 @@ class _QualityControlScreenState extends State<QualityControlScreen> {
 
   void _updateQCStatus(Map<String, dynamic> item, String status) async {
     try {
-      // Save QC record to database
       await _apiService.createQualityCheckRecord({
         'reception_id': item['id'],
         'product_name': item['product_name'],
@@ -227,36 +232,16 @@ class _QualityControlScreenState extends State<QualityControlScreen> {
         'status': status,
         'notes': 'QC performed via mobile app',
       });
-      
-      // Reload data to get updated status
+
       await _loadQualityChecks();
-      
-      // Jika status PASS, simpan ke inventory
-      if (status == 'PASS') {
-        try {
-          await _saveToInventory(item);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('${item['product_name']} - Lulus QC dan disimpan ke inventory'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        } catch (e) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('${item['product_name']} - Lulus QC tapi gagal simpan ke inventory'),
-              backgroundColor: Colors.orange,
-            ),
-          );
-        }
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${item['product_name']} - Gagal QC'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              '${item['product_name']} - Lulus QC dan disimpan ke inventory'),
+          backgroundColor: Colors.green,
+        ),
+      );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -267,25 +252,62 @@ class _QualityControlScreenState extends State<QualityControlScreen> {
     }
   }
 
-  Future<void> _saveToInventory(Map<String, dynamic> item) async {
-    final inventoryItem = {
-      'product_name': item['product_name'],
-      'category': item['supplier'] ?? 'General',
-      'quantity': item['quantity'],
-      'location': item['location'] ?? 'Warehouse A',
-      'min_stock': 10,
-    };
-    
+  void _handleFailedQC(Map<String, dynamic> item) async {
     try {
-      final result = await _apiService.createInventoryItem(inventoryItem);
-      print('✅ Item saved to inventory: ${item['product_name']} - $result');
+      print('🔄 Starting failed QC process for: ${item['product_name']}');
+      print('📋 Item data: $item');
+      
+      // Update QC status to FAIL
+      print('📝 Creating QC record...');
+      final qcResult = await _apiService.createQualityCheckRecord({
+        'reception_id': item['id'],
+        'product_name': item['product_name'],
+        'quantity': item['quantity'],
+        'status': 'FAIL',
+        'notes': 'Failed QC - redirected to returns',
+      });
+      print('✅ QC record created: $qcResult');
+
+      // Create return record for failed QC item
+      print('📝 Creating return record...');
+      final returnData = {
+        'product_name': item['product_name'],
+        'quantity': item['quantity'],
+        'return_type': 'QUALITY_FAIL',
+        'reason': 'Failed quality control inspection',
+        'supplier': item['supplier'] ?? 'N/A',
+        'reception_id': item['id'],
+      };
+      print('📋 Return data: $returnData');
+      
+      final returnResult = await _apiService.createReturn(returnData);
+      print('✅ Return record created: $returnResult');
+
+      await _loadQualityChecks();
+
+      // Navigate to returns screen
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const ReturnsScreen()),
+      );
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${item['product_name']} - Gagal QC, disimpan ke Retur'),
+          backgroundColor: Colors.orange,
+        ),
+      );
     } catch (e) {
-      print('❌ Failed to save to inventory: $e');
-      throw e;
+      print('❌ Error in _handleFailedQC: $e');
+      print('📋 Stack trace: ${StackTrace.current}');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Gagal memproses QC: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
-  void _showAddQualityCheckDialog() {
-    // Tidak diperlukan lagi karena data otomatis dari receptions
-  }
+  void _showAddQualityCheckDialog() {}
 }

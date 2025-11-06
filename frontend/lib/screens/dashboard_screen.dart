@@ -84,11 +84,8 @@ class DashboardScreenState extends State<DashboardScreen> {
           MaterialPageRoute(builder: (context) => const QualityControlScreen()),
         );
         break;
-      case 'Validasi Barang':
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const QualityControlScreen()),
-        );
+      case 'Retur':
+        Navigator.pushNamed(context, '/returns');
         break;
       default:
         ScaffoldMessenger.of(context).showSnackBar(

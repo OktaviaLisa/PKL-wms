@@ -27,6 +27,7 @@ func SetupRoutes(h *Handler) *gin.Engine {
 	r.GET("/api/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok", "service": "wms-backend"})
 	})
+
 	
 	api := r.Group("/api")
 	{
@@ -266,13 +267,6 @@ func (h *Handler) GetDispatches(c *gin.Context) {
 	c.JSON(http.StatusOK, dispatches)
 }
 
-func (h *Handler) GetReturns(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"message": "Returns endpoint"})
-}
-
-func (h *Handler) CreateReturn(c *gin.Context) {
-	c.JSON(http.StatusCreated, gin.H{"message": "Return created"})
-}
 
 func (h *Handler) GetQualityChecks(c *gin.Context) {
 	rows, err := h.DB.Query(`
@@ -347,6 +341,53 @@ func (h *Handler) CreateQualityCheckRecord(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create quality check record"})
 		return
+	}
+
+	// If status is PASS, add to inventory
+	if req.Status == "PASS" {
+		// Find or create product_id
+		var productID int
+		err = h.DB.QueryRow(`SELECT id FROM warehouse_product WHERE name = $1`, req.ProductName).Scan(&productID)
+		
+		if err != nil {
+			// Product doesn't exist, create new one
+			err = h.DB.QueryRow(`
+				INSERT INTO warehouse_product (name, sku, category_id, description, price, created_at)
+				VALUES ($1, $2, 1, 'Auto-created from QC', 0, NOW())
+				RETURNING id
+			`, req.ProductName, "AUTO-"+req.ProductName).Scan(&productID)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "QC saved but failed to create product: " + err.Error()})
+				return
+			}
+		}
+
+		// Check if already exists in inventory
+		var count int
+		err = h.DB.QueryRow(`SELECT COUNT(*) FROM inventory WHERE product_id = $1`, productID).Scan(&count)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "QC saved but failed to check inventory: " + err.Error()})
+			return
+		}
+
+		if count == 0 {
+			// Insert new inventory record
+			_, err = h.DB.Exec(`
+				INSERT INTO inventory (product_id, product_name, quantity, min_stock, location_id, updated_at)
+				VALUES ($1, $2, $3, 0, 1, NOW())
+			`, productID, req.ProductName, req.Quantity)
+		} else {
+			// Update existing inventory
+			_, err = h.DB.Exec(`
+				UPDATE inventory SET quantity = quantity + $1, updated_at = NOW()
+				WHERE product_id = $2
+			`, req.Quantity, productID)
+		}
+		
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "QC saved but failed to update inventory: " + err.Error()})
+			return
+		}
 	}
 
 	c.JSON(http.StatusCreated, gin.H{

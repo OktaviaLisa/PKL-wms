@@ -180,6 +180,16 @@ func createTables() error {
 			created_by INTEGER DEFAULT 1,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		)`,
+		`CREATE TABLE IF NOT EXISTS receptions (
+			id SERIAL PRIMARY KEY,
+			product_name VARCHAR(200) NOT NULL,
+			category VARCHAR(100),
+			quantity INTEGER NOT NULL,
+			location VARCHAR(200),
+			notes TEXT,
+			received_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			status VARCHAR(50) DEFAULT 'quality_check'
+		)`,
 		`CREATE TABLE IF NOT EXISTS quality_checks (
 			id SERIAL PRIMARY KEY,
 			reception_id INTEGER,
@@ -188,6 +198,28 @@ func createTables() error {
 			status VARCHAR(50),
 			notes TEXT,
 			checked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE TABLE IF NOT EXISTS returns (
+			id SERIAL PRIMARY KEY,
+			product_name VARCHAR(255) NOT NULL,
+			quantity INTEGER NOT NULL,
+			return_type VARCHAR(50) NOT NULL DEFAULT 'QUALITY_FAIL',
+			reason TEXT,
+			status VARCHAR(50) NOT NULL DEFAULT 'PENDING',
+			supplier VARCHAR(255),
+			reception_id INTEGER,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE TABLE IF NOT EXISTS dispatches (
+			id SERIAL PRIMARY KEY,
+			product_name VARCHAR(255) NOT NULL,
+			customer VARCHAR(255),
+			quantity INTEGER NOT NULL,
+			location VARCHAR(255),
+			notes TEXT,
+			dispatch_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			status VARCHAR(50) DEFAULT 'pending'
 		)`,
 
 	}
@@ -212,24 +244,41 @@ func createDefaultData() error {
 }
 
 func createDefaultAdmin() error {
+	// Create admin user
 	var count int
 	err := DB.QueryRow("SELECT COUNT(*) FROM auth_user WHERE username = 'admin'").Scan(&count)
-	if err != nil || count > 0 {
-		return nil
+	if err == nil && count == 0 {
+		hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("admin"), bcrypt.DefaultCost)
+		
+		_, err = DB.Exec(`
+			INSERT INTO auth_user (username, email, password, is_staff, is_superuser, is_active, first_name, last_name, roles, date_joined) 
+			VALUES ('admin', 'admin@admin.com', $1, true, true, true, 'Admin', 'User', 'admin', NOW())
+		`, string(hashedPassword))
+		
+		if err != nil {
+			return fmt.Errorf("error creating admin user: %v", err)
+		}
+		
+		fmt.Println("Default admin user created (admin/admin)")
 	}
 
-	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("admin"), bcrypt.DefaultCost)
-	
-	_, err = DB.Exec(`
-		INSERT INTO auth_user (username, email, password, is_staff, is_superuser, is_active, first_name, last_name, roles, date_joined) 
-		VALUES ('admin', 'admin@admin.com', $1, true, true, true, 'Admin', 'User', 'admin', NOW())
-	`, string(hashedPassword))
-	
-	if err != nil {
-		return fmt.Errorf("error creating admin user: %v", err)
+	// Create QC Inspector user
+	err = DB.QueryRow("SELECT COUNT(*) FROM auth_user WHERE username = 'qc_inspector'").Scan(&count)
+	if err == nil && count == 0 {
+		hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("qc123"), bcrypt.DefaultCost)
+		
+		_, err = DB.Exec(`
+			INSERT INTO auth_user (username, email, password, is_staff, is_superuser, is_active, first_name, last_name, roles, date_joined) 
+			VALUES ('qc_inspector', 'qc@wms.com', $1, false, false, true, 'QC', 'Inspector', 'qc_inspector', NOW())
+		`, string(hashedPassword))
+		
+		if err != nil {
+			return fmt.Errorf("error creating qc_inspector user: %v", err)
+		}
+		
+		fmt.Println("Default QC Inspector user created (qc_inspector/qc123)")
 	}
-	
-	fmt.Println("Default admin user created (admin/admin)")
+
 	return nil
 }
 
